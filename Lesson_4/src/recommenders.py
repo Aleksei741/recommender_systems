@@ -164,7 +164,7 @@ class MainRecommender:
             return self.popularity[:N]
 			
         filter_items = [self.itemid_to_id[999999]]
-		
+
         # your_code
         sparse_user_item=csr_matrix(self.user_item_matrix).tocsr()
         

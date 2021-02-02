@@ -31,11 +31,11 @@ def prefilter_items(data_train,
     # Уберем слишком дорогие товары
     data_train.loc[data_train['price'] > high_price, 'item_id'] = 999999
 	
-	# Оставим только 5000 самых популярных товаров
+    # Оставим только 5000 самых популярных товаров
     popularity = data_train.groupby('item_id')['quantity'].sum().reset_index()
     popularity.rename(columns={'quantity': 'n_sold'}, inplace=True)
     top_5000 = popularity.sort_values('n_sold', ascending=False).head(5000).item_id.tolist()
-    #добавим, чтобы не потерять юзеров
+    # добавим, чтобы не потерять юзеров
     data_train.loc[~data_train['item_id'].isin(top_5000), 'item_id'] = 999999 
 
     return data_train
