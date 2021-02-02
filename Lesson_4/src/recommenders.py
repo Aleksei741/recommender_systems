@@ -23,6 +23,11 @@ class MainRecommender:
         
         # your_code. Это не обязательная часть. Но если вам удобно что-либо посчитать тут - можно это сделать
         self.data = data.copy()
+		
+        self.popularity = self.data.groupby('item_id')['quantity'].sum().reset_index()
+        self.popularity.rename(columns={'quantity': 'n_sold'}, inplace=True)
+        self.popularity = self.popularity.sort_values('n_sold', ascending=False).item_id.tolist()		
+        
         self.user_item_matrix = self.prepare_matrix(data)  # pd.DataFrame
         self.id_to_itemid, self.id_to_userid,\
             self.itemid_to_id, self.userid_to_id = self.prepare_dicts(self.user_item_matrix)
@@ -88,7 +93,9 @@ class MainRecommender:
 
     def get_similar_items_recommendation(self, user, N=5):
         """Рекомендуем товары, похожие на топ-N купленных юзером товаров"""
-        
+        if user not in self.userid_to_id.keys():
+            return self.popularity[:N]
+		
         # your_code
         # Практически полностью реализовали на прошлом вебинаре
         
@@ -102,24 +109,76 @@ class MainRecommender:
         popularity.sort_values('quantity', ascending=False, inplace=True)
         popularity['similar_recommendation'] = popularity['item_id'].apply(lambda x: get_rec(self.model, x))
 
-        res = popularity['similar_recommendation'].unique()[:N]        
+        res = popularity['similar_recommendation'].unique()[:N]     
+
+        if len(res) < N:
+            res = np.append(res, self.popularity[:(N - len(res))])
         
-        #assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
+        assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
         return res
     
     def get_similar_users_recommendation(self, user, N=5):
         """Рекомендуем топ-N товаров, среди купленных похожими юзерами"""
+        if user not in self.userid_to_id.keys():
+            return self.popularity[:N]
+		
+        similar_users = self.model.similar_users(self.userid_to_id[user], N=N)
+        similar_users = [rec[0] for rec in similar_users]
+        #print(similar_users)
+		
+        res = list()
+        for user in similar_users:
+            res.append(self.get_own_recommendations(user, N=1)[0])		
 
+        if len(res) < N:
+            res = np.append(res, self.popularity[:(N - len(res))])
+        assert len(res) == N, 'Количество рекомендаций != {}'.format(N)			
+        return res
+		
+    def get_als_recommendations(self, user, N=5):
+		
+        filter_items = [self.itemid_to_id[999999]]
+        if user not in self.userid_to_id.keys():
+            return self.popularity[:N]
+			
         # your_code
-        sparse_user_item=csr_matrix(self.user_item_matrix).T.tocsr()
+        sparse_user_item=csr_matrix(self.user_item_matrix).tocsr()
         
         res = [self.id_to_itemid[rec[0]] for rec in 
                     self.model.recommend(userid=self.userid_to_id[user], 
                                          user_items=sparse_user_item,   # на вход user-item matrix
                                          N=N, 
                                          filter_already_liked_items=False, 
-                                         #filter_items=[self.itemid_to_id[999999]], # !!! 
+                                         filter_items=filter_items,
                                          recalculate_user=True)]
-
+        if len(res) < N:
+            res = np.append(res, self.popularity[:(N - len(res))])
+			
         assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
         return res
+		
+    def get_own_recommendations(self, user, N=5):
+        """Рекомендуем товары среди тех, которые юзер уже купил"""
+		
+        if user not in self.userid_to_id.keys():
+            return self.popularity[:N]
+			
+        filter_items = [self.itemid_to_id[999999]]
+		
+        # your_code
+        sparse_user_item=csr_matrix(self.user_item_matrix).tocsr()
+        
+        res = [self.id_to_itemid[rec[0]] for rec in 
+                    self.own_recommender.recommend(userid=self.userid_to_id[user], 
+                                         user_items=sparse_user_item,   # на вход user-item matrix
+                                         N=N, 
+                                         filter_already_liked_items=False, 
+                                         filter_items=filter_items,
+                                         recalculate_user=True)]	
+										 
+        if len(res) < N:
+            res = np.append(res, self.popularity[:(N - len(res))])
+			
+        assert len(res) == N, 'Количество рекомендаций != {}'.format(N)
+        return res
+		
